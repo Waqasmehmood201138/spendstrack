@@ -367,6 +367,19 @@ begin
 end;
 $$;
 
+-- Inserts a system-authored comment (user_id null). A narrow security-
+-- definer helper for the same reason as notify_expense_participants:
+-- comments_insert's RLS policy requires user_id = auth.uid(), which a NULL
+-- (system) user_id can never satisfy — this is the one controlled path
+-- allowed to write a system comment instead of relaxing that policy for
+-- every client-side insert.
+create or replace function public.add_system_comment(p_expense_id uuid, p_content text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.comments (expense_id, comment_type, content) values (p_expense_id, 'system', p_content);
+end;
+$$;
+
 -- p_users: [{ "user_id": uuid, "paid_share": numeric, "owed_share": numeric, "percentage": numeric|null, "shares": int|null }]
 create or replace function public.create_expense(
   p_group_id        uuid,
@@ -381,11 +394,19 @@ create or replace function public.create_expense(
   p_users            jsonb
 ) returns uuid language plpgsql security invoker set search_path = public as $$
 declare
-  v_expense_id uuid;
+  -- Pre-generated rather than read back via `returning ... into`: this
+  -- function is SECURITY INVOKER (RLS genuinely applies), and `returning`
+  -- makes Postgres re-check the table's SELECT policy against the new row
+  -- within the SAME command. expenses_select's can_access_expense() looks
+  -- up this very row's group_id via a subquery on public.expenses — but a
+  -- command's snapshot is fixed at its start, so that self-referential
+  -- lookup can't see the row this same INSERT is still creating, and the
+  -- check always fails ("new row violates row-level security policy").
+  -- Knowing the id upfront avoids needing `returning` at all.
+  v_expense_id uuid := gen_random_uuid();
 begin
-  insert into public.expenses (group_id, description, details, cost, currency_code, category_id, split_type, is_payment, expense_date, created_by)
-  values (p_group_id, p_description, p_details, p_cost, p_currency_code, p_category_id, p_split_type, p_is_payment, p_expense_date, auth.uid())
-  returning id into v_expense_id;
+  insert into public.expenses (id, group_id, description, details, cost, currency_code, category_id, split_type, is_payment, expense_date, created_by)
+  values (v_expense_id, p_group_id, p_description, p_details, p_cost, p_currency_code, p_category_id, p_split_type, p_is_payment, p_expense_date, auth.uid());
 
   insert into public.expense_users (expense_id, user_id, paid_share, owed_share, percentage, shares)
   select v_expense_id, (u ->> 'user_id')::uuid, (u ->> 'paid_share')::numeric, (u ->> 'owed_share')::numeric,
@@ -393,8 +414,7 @@ begin
   from jsonb_array_elements(p_users) as u;
 
   if not p_is_payment then
-    insert into public.comments (expense_id, comment_type, content)
-    values (v_expense_id, 'system', 'created this expense');
+    perform public.add_system_comment(v_expense_id, 'created this expense');
   end if;
 
   perform public.notify_expense_participants(v_expense_id);
@@ -418,6 +438,7 @@ revoke execute on function public.remove_friend(uuid) from anon, public;
 revoke execute on function public.add_group_member_by_email(uuid, text) from anon, public;
 revoke execute on function public.create_expense(uuid, text, text, numeric, text, int, public.split_type, boolean, date, jsonb) from anon, public;
 revoke execute on function public.notify_expense_participants(uuid) from anon, public;
+revoke execute on function public.add_system_comment(uuid, text) from anon, public;
 revoke execute on function public.soft_delete_expense(uuid) from anon, public;
 grant execute on function public.create_group(text, public.group_type) to authenticated;
 grant execute on function public.join_group_by_invite(uuid) to authenticated;
@@ -426,6 +447,7 @@ grant execute on function public.remove_friend(uuid) to authenticated;
 grant execute on function public.add_group_member_by_email(uuid, text) to authenticated;
 grant execute on function public.create_expense(uuid, text, text, numeric, text, int, public.split_type, boolean, date, jsonb) to authenticated;
 grant execute on function public.notify_expense_participants(uuid) to authenticated;
+grant execute on function public.add_system_comment(uuid, text) to authenticated;
 grant execute on function public.soft_delete_expense(uuid) to authenticated;
 
 -- ============================================================================
