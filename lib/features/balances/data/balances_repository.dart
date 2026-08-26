@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/money/money.dart';
 import 'balance_model.dart';
 
 class BalancesRepository {
@@ -28,5 +29,48 @@ class BalancesRepository {
   Future<List<UserBalance>> getFriendBalance(String friendId) async {
     final rows = await _client.from('friend_balances').select().eq('friend_id', friendId);
     return rows.map(UserBalance.fromFriendBalanceJson).toList();
+  }
+
+  /// The signed-in user's net position across every expense they're a
+  /// participant in — group and direct combined, every currency they've
+  /// ever used — powering the "Overall, you are owed/owe X" header shared
+  /// by the Groups and Friends tabs. Summed client-side from raw
+  /// `expense_users` rows rather than a dedicated view, since it's a small,
+  /// per-user dataset and RLS already scopes it correctly.
+  Future<List<Money>> getOverallBalance(String userId) async {
+    final rows = await _client
+        .from('expense_users')
+        .select('paid_share, owed_share, expenses!inner(currency_code, deleted_at)')
+        .eq('user_id', userId);
+
+    final totals = <String, int>{};
+    for (final row in rows) {
+      final expense = row['expenses'] as Map<String, dynamic>;
+      if (expense['deleted_at'] != null) continue;
+      final currencyCode = expense['currency_code'] as String;
+      final netCents = (((row['paid_share'] as num) - (row['owed_share'] as num)) * 100).round();
+      totals[currencyCode] = (totals[currencyCode] ?? 0) + netCents;
+    }
+    return totals.entries.map((e) => Money(e.value, e.key)).toList();
+  }
+
+  /// The user's net position across only their direct (non-group) expenses
+  /// — powers the "Non-group expenses" pseudo-group row on the Groups tab,
+  /// matching Splitwise's own layout.
+  Future<List<Money>> getNonGroupBalance(String userId) async {
+    final rows = await _client
+        .from('expense_users')
+        .select('paid_share, owed_share, expenses!inner(currency_code, deleted_at, group_id)')
+        .eq('user_id', userId);
+
+    final totals = <String, int>{};
+    for (final row in rows) {
+      final expense = row['expenses'] as Map<String, dynamic>;
+      if (expense['deleted_at'] != null || expense['group_id'] != null) continue;
+      final currencyCode = expense['currency_code'] as String;
+      final netCents = (((row['paid_share'] as num) - (row['owed_share'] as num)) * 100).round();
+      totals[currencyCode] = (totals[currencyCode] ?? 0) + netCents;
+    }
+    return totals.entries.map((e) => Money(e.value, e.key)).toList();
   }
 }

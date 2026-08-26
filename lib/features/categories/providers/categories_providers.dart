@@ -12,9 +12,10 @@ final referenceDataRepositoryProvider = Provider<ReferenceDataRepository>((ref) 
 /// `keepAlive` (not autoDispose) — reference data doesn't change during a
 /// session, so fetch once and hold it rather than refetching every time a
 /// screen using it is pushed.
-final categoriesProvider = FutureProvider<List<Category>>((ref) {
+final categoriesProvider = FutureProvider<List<Category>>((ref) async {
   ref.keepAlive();
-  return ref.watch(referenceDataRepositoryProvider).getCategories();
+  final raw = await ref.watch(referenceDataRepositoryProvider).getCategories();
+  return Category.resolveCategoryGroups(raw);
 });
 
 final currenciesProvider = FutureProvider<List<Currency>>((ref) {

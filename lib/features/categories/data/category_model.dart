@@ -8,11 +8,20 @@ class Category {
   final String name;
   final String iconName;
 
+  /// The top-level group this category belongs to (e.g. "Food and drink"
+  /// for the "Dining out" subcategory, or its own name if it IS a top-level
+  /// group) — resolved by [resolveCategoryGroups] after fetching the full
+  /// list, since a single row's `parent_id` alone isn't enough to know its
+  /// ultimate ancestor. Used to pick this category's color; see
+  /// [CategoryIcon] and `core/theme/app_theme.dart`'s `categoryGroupColors`.
+  final String groupName;
+
   const Category({
     required this.id,
     required this.parentId,
     required this.name,
     required this.iconName,
+    this.groupName = '',
   });
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
@@ -21,6 +30,17 @@ class Category {
         name: json['name'] as String,
         iconName: json['icon_name'] as String,
       );
+
+  Category _withGroupName(String groupName) =>
+      Category(id: id, parentId: parentId, name: name, iconName: iconName, groupName: groupName);
+
+  /// Resolves every category's [groupName] from a freshly fetched flat list
+  /// — called once by `categoriesProvider` right after loading.
+  static List<Category> resolveCategoryGroups(List<Category> raw) {
+    final byId = {for (final c in raw) c.id: c};
+    String groupNameOf(Category c) => c.parentId == null ? c.name : (byId[c.parentId]?.name ?? c.name);
+    return raw.map((c) => c._withGroupName(groupNameOf(c))).toList();
+  }
 
   /// Maps the seeded `icon_name` string to a concrete Material icon. Falls
   /// back to a generic category glyph for any name not listed here so a new

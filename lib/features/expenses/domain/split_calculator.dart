@@ -1,3 +1,5 @@
+import '../../../core/money/money.dart';
+
 /// One participant's owed share of an expense, in integer cents, plus the
 /// raw split input that produced it (kept for [split_type] `percentage`/
 /// `shares` so the expense can later be re-edited from its original inputs
@@ -106,6 +108,30 @@ List<ParticipantSplit> calculateSharesSplit({
   return [
     for (final entry in sharesByUser.entries)
       ParticipantSplit(userId: entry.key, owedCents: owed[entry.key]!, shares: entry.value),
+  ];
+}
+
+/// Adjustment split (e.g. "Alex owes an extra $5 for the dessert they had"):
+/// each participant's fixed adjustment is added on top of an equal base
+/// share of whatever remains after all adjustments are subtracted out.
+/// Matches Splitwise's own "by adjustment" split exactly.
+List<ParticipantSplit> calculateAdjustmentSplit({
+  required int totalCents,
+  required Map<String, int> adjustmentCentsByUser,
+}) {
+  if (adjustmentCentsByUser.isEmpty) {
+    throw const SplitValidationError('Select at least one person to split with.');
+  }
+  final totalAdjustments = adjustmentCentsByUser.values.fold<int>(0, (a, b) => a + b);
+  final remainder = totalCents - totalAdjustments;
+  if (remainder < 0) {
+    throw const SplitValidationError('Adjustments add up to more than the expense total.');
+  }
+  final baseShares = distributeCentsEqually(remainder, adjustmentCentsByUser.length);
+  final ids = adjustmentCentsByUser.keys.toList();
+  return [
+    for (var i = 0; i < ids.length; i++)
+      ParticipantSplit(userId: ids[i], owedCents: baseShares[i] + adjustmentCentsByUser[ids[i]]!),
   ];
 }
 

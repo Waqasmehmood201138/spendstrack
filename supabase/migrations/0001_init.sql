@@ -13,7 +13,7 @@ create extension if not exists pgcrypto;
 -- enums
 -- ---------------------------------------------------------------------------
 create type public.group_type as enum ('home', 'trip', 'couple', 'apartment', 'house', 'other');
-create type public.split_type as enum ('equal', 'exact', 'percentage', 'shares');
+create type public.split_type as enum ('equal', 'exact', 'percentage', 'shares', 'adjustment');
 create type public.repeat_interval as enum ('never', 'weekly', 'fortnightly', 'monthly', 'yearly');
 create type public.comment_type as enum ('user', 'system');
 create type public.notification_type as enum (
@@ -78,6 +78,7 @@ create table public.groups (
   name                text not null check (char_length(trim(name)) > 0),
   group_type          public.group_type not null default 'other',
   simplify_by_default boolean not null default true,
+  whiteboard          text not null default '',
   avatar_url          text,
   invite_token        uuid not null default gen_random_uuid(),
   created_by          uuid not null references public.profiles (id),
@@ -279,6 +280,17 @@ begin
 end;
 $$;
 
+-- Any group member (not just the owner) can edit the whiteboard — a narrow
+-- security-definer RPC rather than loosening groups_update, which stays
+-- owner-only for name/type/settings.
+create or replace function public.update_group_whiteboard(p_group_id uuid, p_whiteboard text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_group_member(p_group_id, auth.uid()) then raise exception 'not authorized'; end if;
+  update public.groups set whiteboard = p_whiteboard where id = p_group_id;
+end;
+$$;
+
 create or replace function public.join_group_by_invite(p_invite_token uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare
@@ -431,6 +443,7 @@ begin
 end;
 $$;
 
+revoke execute on function public.update_group_whiteboard(uuid, text) from anon, public;
 revoke execute on function public.create_group(text, public.group_type) from anon, public;
 revoke execute on function public.join_group_by_invite(uuid) from anon, public;
 revoke execute on function public.add_friend_by_email(text) from anon, public;
@@ -440,6 +453,7 @@ revoke execute on function public.create_expense(uuid, text, text, numeric, text
 revoke execute on function public.notify_expense_participants(uuid) from anon, public;
 revoke execute on function public.add_system_comment(uuid, text) from anon, public;
 revoke execute on function public.soft_delete_expense(uuid) from anon, public;
+grant execute on function public.update_group_whiteboard(uuid, text) to authenticated;
 grant execute on function public.create_group(text, public.group_type) to authenticated;
 grant execute on function public.join_group_by_invite(uuid) to authenticated;
 grant execute on function public.add_friend_by_email(text) to authenticated;

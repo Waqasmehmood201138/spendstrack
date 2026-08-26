@@ -26,4 +26,16 @@ class AuthRepository {
   }
 
   Future<void> signOut() => _client.auth.signOut();
+
+  /// Updates the auth email. Supabase sends a confirmation link to the new
+  /// address by default (project-setting dependent) — the change only takes
+  /// effect once that's confirmed, same as the real Splitwise's email-change
+  /// flow.
+  Future<void> updateEmail(String newEmail) async {
+    await _client.auth.updateUser(UserAttributes(email: newEmail));
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
 }

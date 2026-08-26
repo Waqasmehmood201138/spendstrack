@@ -16,12 +16,27 @@ class GroupsRepository {
         .from('groups')
         .stream(primaryKey: ['id'])
         .order('updated_at', ascending: false)
-        .map((rows) => rows.map(Group.fromJson).toList());
+        .map((rows) => rows.where((r) => r['deleted_at'] == null).map(Group.fromJson).toList());
   }
 
   Future<Group> getGroup(String groupId) async {
     final row = await _client.from('groups').select().eq('id', groupId).single();
     return Group.fromJson(row);
+  }
+
+  Future<void> updateSimplifyByDefault({required String groupId, required bool value}) async {
+    await _client.from('groups').update({'simplify_by_default': value}).eq('id', groupId);
+  }
+
+  Future<void> updateWhiteboard({required String groupId, required String whiteboard}) async {
+    await _client.rpc('update_group_whiteboard', params: {'p_group_id': groupId, 'p_whiteboard': whiteboard});
+  }
+
+  /// Soft-delete (owner only, enforced by the same RLS as any other group
+  /// update) — the group disappears from `watchMyGroups`/RLS-visible lists
+  /// but its expense history is preserved, not destroyed.
+  Future<void> deleteGroup(String groupId) async {
+    await _client.from('groups').update({'deleted_at': DateTime.now().toIso8601String()}).eq('id', groupId);
   }
 
   Stream<List<GroupMember>> watchMembers(String groupId) {

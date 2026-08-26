@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/money/money.dart';
 import '../../../core/supabase/supabase_providers.dart';
 import '../../expenses/providers/expenses_providers.dart';
 import '../data/balance_model.dart';
@@ -21,6 +22,26 @@ final groupBalancesProvider = FutureProvider.family<List<UserBalance>, String>((
 
 final friendBalanceProvider = FutureProvider.family<List<UserBalance>, String>((ref, friendId) {
   return ref.watch(balancesRepositoryProvider).getFriendBalance(friendId);
+});
+
+/// Powers the "Overall, you are owed/owe X" header shared by the Groups and
+/// Friends tabs. There's no single realtime stream spanning every group and
+/// friend an expense could touch, so this doesn't auto-refresh like
+/// [groupBalancesProvider] does — instead, call sites that create an expense
+/// or settlement explicitly `ref.invalidate(overallBalanceProvider)` after
+/// success (see AddExpenseScreen, SettleUpScreen).
+final overallBalanceProvider = FutureProvider<List<Money>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return const [];
+  return ref.watch(balancesRepositoryProvider).getOverallBalance(userId);
+});
+
+/// Backs the "Non-group expenses" row on the Groups tab. Same invalidation
+/// caveat as [overallBalanceProvider] — no single realtime stream to hook.
+final nonGroupBalanceProvider = FutureProvider<List<Money>>((ref) async {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return const [];
+  return ref.watch(balancesRepositoryProvider).getNonGroupBalance(userId);
 });
 
 /// Debt-simplification suggestions for a group, grouped by currency (see

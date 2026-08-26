@@ -9,6 +9,7 @@ class Group {
   final String? avatarUrl;
   final String inviteToken;
   final String createdBy;
+  final String whiteboard;
 
   const Group({
     required this.id,
@@ -18,6 +19,7 @@ class Group {
     required this.avatarUrl,
     required this.inviteToken,
     required this.createdBy,
+    required this.whiteboard,
   });
 
   factory Group.fromJson(Map<String, dynamic> json) => Group(
@@ -28,6 +30,7 @@ class Group {
         avatarUrl: json['avatar_url'] as String?,
         inviteToken: json['invite_token'] as String,
         createdBy: json['created_by'] as String,
+        whiteboard: json['whiteboard'] as String? ?? '',
       );
 }
 

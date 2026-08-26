@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/user_avatar.dart';
+import '../../balances/providers/balances_providers.dart';
+import '../../profile/providers/profile_providers.dart';
 import '../data/expense_user_model.dart';
 import '../providers/expenses_providers.dart';
 
-/// Records a payment. Per docs/database-schema.md, a payment is just an
-/// expense with `is_payment = true` and two participants: the payer's
-/// `paid_share` equals the amount, the payee's `owed_share` equals the
-/// amount — so it nets out the debt it settles using the exact same balance
-/// math as any other expense, with no special-case code path.
+/// "Record a payment" — matches Splitwise's own screen: two avatars joined
+/// by an arrow, a large editable amount, an explanatory note that no money
+/// actually moves, and a single pill button. Per docs/database-schema.md, a
+/// payment is just an expense with `is_payment = true` and two participants
+/// whose paid/owed shares net out the debt it settles — no special-case
+/// balance math needed.
 class SettleUpScreen extends ConsumerStatefulWidget {
   final String? groupId;
   final String fromUserId;
@@ -79,6 +83,8 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
               ExpenseUser(userId: widget.toUserId, paidCents: 0, owedCents: cents),
             ],
           );
+      ref.invalidate(overallBalanceProvider);
+      if (widget.groupId == null) ref.invalidate(nonGroupBalanceProvider);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       setState(() => _errorMessage = 'Could not record this payment. Please try again.');
@@ -87,10 +93,31 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
     }
   }
 
+  Future<void> _editAmount() async {
+    final controller = TextEditingController(text: _amountController.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Amount'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(prefixText: '${widget.currencyCode} '),
+        ),
+        actions: [FilledButton(onPressed: () => Navigator.of(context).pop(controller.text), child: const Text('Done'))],
+      ),
+    );
+    if (result != null) setState(() => _amountController.text = result);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final fromProfile = ref.watch(profileByIdProvider(widget.fromUserId)).valueOrNull;
+    final toProfile = ref.watch(profileByIdProvider(widget.toUserId)).valueOrNull;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Settle up')),
+      appBar: AppBar(title: const Text('Record a payment')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -101,46 +128,80 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
                 color: Theme.of(context).colorScheme.errorContainer,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                _errorMessage!,
-                style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
-              ),
+              child: Text(_errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
             ),
             const SizedBox(height: 16),
           ],
-          Text(
-            '${widget.fromDisplayName} pays ${widget.toDisplayName}',
-            style: Theme.of(context).textTheme.titleMedium,
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              UserAvatar(pictureUrl: fromProfile?.pictureUrl, displayName: widget.fromDisplayName, radius: 36),
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Icon(Icons.arrow_forward, size: 28)),
+              UserAvatar(pictureUrl: toProfile?.pictureUrl, displayName: widget.toDisplayName, radius: 36),
+            ],
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _amountController,
-            decoration: InputDecoration(labelText: 'Amount', prefixText: '${widget.currencyCode} '),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.calendar_today_outlined),
-            title: Text('${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _date,
-                firstDate: DateTime(2000),
-                lastDate: DateTime.now(),
-              );
-              if (picked != null) setState(() => _date = picked);
-            },
+          Text(
+            '${widget.fromDisplayName} paid ${widget.toDisplayName}',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 24),
+          InkWell(
+            onTap: _editAmount,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(widget.currencyCode, style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(width: 8),
+                Text(
+                  _amountController.text.isEmpty ? '0.00' : _amountController.text,
+                  style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.edit_outlined, size: 20),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _date,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now(),
+                );
+                if (picked != null) setState(() => _date = picked);
+              },
+              child: Text('${_date.year}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('You are recording a payment that happened outside SpendsTrack. No money will be moved.'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
           FilledButton(
             onPressed: _isSubmitting ? null : _submit,
             child: _isSubmitting
                 ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Record payment'),
+                : const Text('Record a payment'),
           ),
         ],
       ),

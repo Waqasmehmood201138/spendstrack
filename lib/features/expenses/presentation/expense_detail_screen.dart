@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_value_widget.dart';
 import '../../../core/widgets/user_avatar.dart';
+import '../../categories/data/category_model.dart';
 import '../../categories/providers/categories_providers.dart';
 import '../../profile/providers/profile_providers.dart';
 import '../data/comment_model.dart';
@@ -44,7 +46,7 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete this expense?'),
-        content: const Text('This removes it from everyone\'s balance.'),
+        content: const Text("This removes it from everyone's balance."),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
@@ -60,20 +62,28 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final expenseAsync = ref.watch(expenseByIdProvider(widget.expenseId));
+    final category = ref.watch(categoryByIdProvider(expenseAsync.valueOrNull?.categoryId));
+    final colors = categoryGroupColors[category?.groupName] ?? categoryGroupColors['Uncategorized']!;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Expense'),
-        actions: [
-          IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline)),
-        ],
+        backgroundColor: colors.background,
+        foregroundColor: colors.foreground,
+        actions: [IconButton(onPressed: _delete, icon: const Icon(Icons.delete_outline))],
       ),
       body: AsyncValueWidget<Expense>(
         value: expenseAsync,
-        data: (expense) => _ExpenseDetailBody(
-          expense: expense,
-          commentController: _commentController,
-          isPostingComment: _isPostingComment,
-          onPostComment: _postComment,
+        data: (expense) => Column(
+          children: [
+            Expanded(
+              child: _ExpenseDetailBody(expense: expense, headerColors: colors, category: category),
+            ),
+            _CommentInputBar(
+              controller: _commentController,
+              isPosting: _isPostingComment,
+              onSend: _postComment,
+            ),
+          ],
         ),
       ),
     );
@@ -82,112 +92,118 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
 
 class _ExpenseDetailBody extends ConsumerWidget {
   final Expense expense;
-  final TextEditingController commentController;
-  final bool isPostingComment;
-  final VoidCallback onPostComment;
+  final CategoryColor headerColors;
+  final Category? category;
 
-  const _ExpenseDetailBody({
-    required this.expense,
-    required this.commentController,
-    required this.isPostingComment,
-    required this.onPostComment,
-  });
+  const _ExpenseDetailBody({required this.expense, required this.headerColors, required this.category});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final category = ref.watch(categoryByIdProvider(expense.categoryId));
+    final createdByName = ref.watch(profileByIdProvider(expense.createdBy)).valueOrNull?.fullName ?? '...';
     final commentsAsync = ref.watch(expenseCommentsProvider(expense.id));
+    final payers = expense.users.where((u) => u.paidCents > 0).toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          children: [
-            Icon(category?.icon ?? Icons.receipt_long, size: 32),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(expense.description, style: Theme.of(context).textTheme.titleLarge),
-                  Text(
-                    '${expense.expenseDate.year}-${expense.expenseDate.month.toString().padLeft(2, '0')}-${expense.expenseDate.day.toString().padLeft(2, '0')}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+        Container(
+          width: double.infinity,
+          color: headerColors.background,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Colors.white,
+                child: Icon(category?.icon ?? Icons.receipt_long, color: headerColors.foreground),
               ),
-            ),
-            Text(expense.cost.format(), style: Theme.of(context).textTheme.titleLarge),
-          ],
-        ),
-        const Divider(height: 32),
-        Text('Split', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        ...expense.users.map((u) => _ParticipantShareTile(userId: u.userId, paidCents: u.paidCents, owedCents: u.owedCents, currencyCode: expense.cost.currencyCode)),
-        const Divider(height: 32),
-        Text('Comments', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        AsyncValueWidget<List<ExpenseComment>>(
-          value: commentsAsync,
-          data: (comments) => Column(
-            children: comments.map((c) => _CommentTile(comment: c)).toList(),
+              const SizedBox(height: 12),
+              Text(expense.description, style: Theme.of(context).textTheme.headlineSmall),
+              Text(expense.cost.format(), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text(
+                'Added by $createdByName on ${_formatDate(expense.createdAt)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: commentController,
-                decoration: const InputDecoration(hintText: 'Add a comment'),
-                onSubmitted: (_) => onPostComment(),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final payer in payers) ...[
+                Text(
+                  '${_nameOf(ref, payer.userId)} paid ${_formatMoney(payer.paidCents, expense.cost.currencyCode)}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final u in expense.users)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 4),
+                          padding: const EdgeInsets.only(left: 12),
+                          decoration: BoxDecoration(
+                            border: Border(left: BorderSide(color: Theme.of(context).dividerColor, width: 2)),
+                          ),
+                          child: Text(
+                            '${_nameOf(ref, u.userId)} owes ${_formatMoney(u.owedCents, expense.cost.currencyCode)}',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const Divider(height: 32),
+              Text('Comments', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              AsyncValueWidget<List<ExpenseComment>>(
+                value: commentsAsync,
+                data: (comments) => Column(children: comments.map((c) => _CommentTile(comment: c)).toList()),
               ),
-            ),
-            IconButton(
-              onPressed: isPostingComment ? null : onPostComment,
-              icon: const Icon(Icons.send),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
   }
+
+  String _nameOf(WidgetRef ref, String userId) => ref.watch(profileByIdProvider(userId)).valueOrNull?.fullName ?? '...';
+
+  String _formatMoney(int cents, String currencyCode) => '$currencyCode ${(cents / 100).toStringAsFixed(2)}';
+
+  String _formatDate(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
 
-class _ParticipantShareTile extends ConsumerWidget {
-  final String userId;
-  final int paidCents;
-  final int owedCents;
-  final String currencyCode;
-
-  const _ParticipantShareTile({
-    required this.userId,
-    required this.paidCents,
-    required this.owedCents,
-    required this.currencyCode,
-  });
+class _CommentInputBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool isPosting;
+  final VoidCallback onSend;
+  const _CommentInputBar({required this.controller, required this.isPosting, required this.onSend});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profileAsync = ref.watch(profileByIdProvider(userId));
-    final name = profileAsync.valueOrNull?.fullName ?? '...';
-    final pictureUrl = profileAsync.valueOrNull?.pictureUrl;
-    final net = paidCents - owedCents;
-
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: UserAvatar(pictureUrl: pictureUrl, displayName: name, radius: 16),
-      title: Text(name),
-      subtitle: Text(paidCents > 0 ? 'Paid ${(paidCents / 100).toStringAsFixed(2)}' : 'Did not pay'),
-      trailing: Text(
-        net == 0 ? 'settled' : '${net > 0 ? '+' : ''}${(net / 100).toStringAsFixed(2)}',
-        style: TextStyle(
-          color: net > 0
-              ? Colors.green
-              : net < 0
-                  ? Theme.of(context).colorScheme.error
-                  : null,
-          fontWeight: FontWeight.bold,
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: Theme.of(context).dividerColor))),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                decoration: const InputDecoration(hintText: 'Add a comment', border: InputBorder.none),
+                onSubmitted: (_) => onSend(),
+              ),
+            ),
+            IconButton(onPressed: isPosting ? null : onSend, icon: const Icon(Icons.send)),
+          ],
         ),
       ),
     );
@@ -203,10 +219,7 @@ class _CommentTile extends ConsumerWidget {
     if (comment.isSystem) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Text(
-          comment.content,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-        ),
+        child: Text(comment.content, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic)),
       );
     }
     final profileAsync = ref.watch(profileByIdProvider(comment.userId!));

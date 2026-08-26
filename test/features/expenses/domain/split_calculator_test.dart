@@ -75,6 +75,34 @@ void main() {
     });
   });
 
+  group('calculateAdjustmentSplit', () {
+    test('adds each adjustment on top of an equal share of the remainder', () {
+      // $30 total, Alex gets a $6 adjustment: remaining $24 split equally
+      // three ways ($8 each), so Alex owes 8+6=14, the other two owe 8 each.
+      final splits = calculateAdjustmentSplit(
+        totalCents: 3000,
+        adjustmentCentsByUser: {'alex': 600, 'b': 0, 'c': 0},
+      );
+      expect(splits.firstWhere((s) => s.userId == 'alex').owedCents, 1400);
+      expect(splits.firstWhere((s) => s.userId == 'b').owedCents, 800);
+      final total = splits.fold<int>(0, (sum, s) => sum + s.owedCents);
+      expect(total, 3000);
+    });
+
+    test('reconciles rounding when the remainder does not divide evenly', () {
+      final splits = calculateAdjustmentSplit(totalCents: 1000, adjustmentCentsByUser: {'a': 0, 'b': 0, 'c': 0});
+      final total = splits.fold<int>(0, (sum, s) => sum + s.owedCents);
+      expect(total, 1000);
+    });
+
+    test('rejects adjustments that exceed the expense total', () {
+      expect(
+        () => calculateAdjustmentSplit(totalCents: 1000, adjustmentCentsByUser: {'a': 1100, 'b': 0}),
+        throwsA(isA<SplitValidationError>()),
+      );
+    });
+  });
+
   group('validatePaidShares', () {
     test('accepts paid amounts that sum to the total', () {
       expect(
