@@ -266,6 +266,18 @@ returns boolean language sql security definer set search_path = public stable as
   end;
 $$;
 
+-- SECURITY DEFINER (not a raw subquery inline in a policy) for the same
+-- reason as the helpers above: a plain correlated subquery on
+-- public.expenses inside another table's RLS policy is still subject to
+-- expenses' OWN select policy (can_access_expense), which for a brand-new
+-- non-group expense is itself circularly blocked on expense_users being
+-- empty — so the "creator" check needs to bypass RLS entirely to see the
+-- row it's supposed to be authorizing against.
+create or replace function public.is_expense_creator(_expense_id uuid, _user_id uuid default auth.uid())
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.expenses where id = _expense_id and created_by = _user_id);
+$$;
+
 -- ---------------------------------------------------------------------------
 -- RPCs (atomic multi-table writes)
 -- ---------------------------------------------------------------------------
@@ -529,7 +541,19 @@ create policy expenses_insert on public.expenses for insert
 create policy expenses_update on public.expenses for update using (public.can_access_expense(id, auth.uid()));
 
 create policy expense_users_select on public.expense_users for select using (public.can_access_expense(expense_id, auth.uid()));
-create policy expense_users_insert on public.expense_users for insert with check (public.can_access_expense(expense_id, auth.uid()));
+-- Checking can_access_expense() alone is circular for a brand-new,
+-- non-group expense: it falls back to is_expense_participant(), which
+-- looks for an EXISTING row in this very table for (expense_id, caller) —
+-- but the first participant rows for a new expense never satisfy that
+-- (nothing to find yet), so a friend/no-group expense could never be
+-- created. Allowing the expense's own creator (is_expense_creator, which
+-- is SECURITY DEFINER and so bypasses expenses' own select RLS — a plain
+-- subquery here would hit the identical circularity one level up) covers
+-- the creation moment; can_access_expense() remains for any later insert.
+create policy expense_users_insert on public.expense_users for insert with check (
+  public.is_expense_creator(expense_id, auth.uid())
+  or public.can_access_expense(expense_id, auth.uid())
+);
 
 create policy comments_select on public.comments for select using (public.can_access_expense(expense_id, auth.uid()));
 create policy comments_insert on public.comments for insert

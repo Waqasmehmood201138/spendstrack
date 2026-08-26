@@ -168,7 +168,7 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
       if (widget.groupId == null) ref.invalidate(nonGroupBalanceProvider);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      setState(() => _errorMessage = 'Could not save this expense. Please try again.');
+      setState(() => _errorMessage = 'Could not save this expense: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

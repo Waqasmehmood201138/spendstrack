@@ -87,7 +87,7 @@ class _SettleUpScreenState extends ConsumerState<SettleUpScreen> {
       if (widget.groupId == null) ref.invalidate(nonGroupBalanceProvider);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      setState(() => _errorMessage = 'Could not record this payment. Please try again.');
+      setState(() => _errorMessage = 'Could not record this payment: $e');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

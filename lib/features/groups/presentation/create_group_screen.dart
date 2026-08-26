@@ -45,7 +45,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
       if (mounted) Navigator.of(context).pop(id);
     } catch (e) {
       setState(() {
-        _errorMessage = 'Could not create group. Please try again.';
+        _errorMessage = 'Could not create group: $e';
         _isSubmitting = false;
       });
     }
