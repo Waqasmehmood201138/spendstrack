@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/avatar_upload_providers.dart';
 import '../../../core/widgets/async_value_widget.dart';
+import '../../../core/widgets/editable_avatar.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/profile_model.dart';
@@ -26,17 +28,7 @@ class ProfileScreen extends ConsumerWidget {
         value: profileAsync,
         data: (profile) => ListView(
           children: [
-            ListTile(
-              leading: UserAvatar(pictureUrl: profile.pictureUrl, displayName: profile.fullName, radius: 28),
-              title: Text(profile.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(profile.email),
-              trailing: TextButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => AccountSettingsScreen(profile: profile)),
-                ),
-                child: const Text('Edit'),
-              ),
-            ),
+            _ProfileHeaderTile(profile: profile),
             const Divider(height: 32),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -74,6 +66,54 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProfileHeaderTile extends ConsumerStatefulWidget {
+  final Profile profile;
+  const _ProfileHeaderTile({required this.profile});
+
+  @override
+  ConsumerState<_ProfileHeaderTile> createState() => _ProfileHeaderTileState();
+}
+
+class _ProfileHeaderTileState extends ConsumerState<_ProfileHeaderTile> {
+  bool _isUploading = false;
+
+  Future<void> _changePicture() async {
+    setState(() => _isUploading = true);
+    try {
+      final url = await ref.read(avatarUploadServiceProvider).pickAndUploadProfilePicture(widget.profile.id);
+      if (url != null) {
+        await ref.read(profileRepositoryProvider).updatePictureUrl(userId: widget.profile.id, pictureUrl: url);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update photo: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: EditableAvatar(
+        size: 56,
+        isUploading: _isUploading,
+        onTap: _changePicture,
+        avatar: UserAvatar(pictureUrl: widget.profile.pictureUrl, displayName: widget.profile.fullName, radius: 28),
+      ),
+      title: Text(widget.profile.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Text(widget.profile.email),
+      trailing: TextButton(
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => AccountSettingsScreen(profile: widget.profile)),
+        ),
+        child: const Text('Edit'),
       ),
     );
   }

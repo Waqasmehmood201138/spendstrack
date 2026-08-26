@@ -32,6 +32,13 @@ class GroupsRepository {
     await _client.rpc('update_group_whiteboard', params: {'p_group_id': groupId, 'p_whiteboard': whiteboard});
   }
 
+  /// Via RPC, not a direct table update: groups_update RLS is owner-only,
+  /// but any member can upload a new logo (matches the avatars_group_write
+  /// storage policy) — same "any member" precedent as updateWhiteboard.
+  Future<void> updateAvatarUrl({required String groupId, required String avatarUrl}) async {
+    await _client.rpc('update_group_avatar', params: {'p_group_id': groupId, 'p_avatar_url': avatarUrl});
+  }
+
   /// Soft-delete (owner only, enforced by the same RLS as any other group
   /// update) — the group disappears from `watchMyGroups`/RLS-visible lists
   /// but its expense history is preserved, not destroyed.

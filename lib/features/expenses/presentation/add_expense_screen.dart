@@ -239,8 +239,14 @@ class _AddExpenseScreenState extends ConsumerState<AddExpenseScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: RichText(
+                  // Explicit base style, not DefaultTextStyle.of(context): if
+                  // that ever fails to resolve to something with a real
+                  // fontSize (e.g. no ambient DefaultTextStyle in scope),
+                  // Flutter silently falls back to its debug placeholder
+                  // style — oversized, colored, underlined — precisely to
+                  // make a missing style obvious. Better to just never risk it.
                   text: TextSpan(
-                    style: DefaultTextStyle.of(context).style,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface),
                     children: [
                       const TextSpan(text: 'With ', style: TextStyle(fontWeight: FontWeight.bold)),
                       const TextSpan(text: 'you', style: TextStyle(fontWeight: FontWeight.bold)),

@@ -70,7 +70,7 @@ class _MemberBalanceExpansion extends ConsumerWidget {
       leading: UserAvatar(pictureUrl: nameAsync.valueOrNull?.pictureUrl, displayName: name, radius: 18),
       title: RichText(
         text: TextSpan(
-          style: DefaultTextStyle.of(context).style,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface),
           children: [
             TextSpan(text: '$name ${isPositive ? 'gets back' : 'owes'} '),
             TextSpan(
@@ -108,7 +108,7 @@ class _SuggestionRow extends ConsumerWidget {
         children: [
           RichText(
             text: TextSpan(
-              style: DefaultTextStyle.of(context).style.copyWith(color: Theme.of(context).colorScheme.outline),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.outline),
               children: [
                 TextSpan(text: '$fromName owes '),
                 TextSpan(

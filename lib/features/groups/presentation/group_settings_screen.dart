@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/storage/avatar_upload_providers.dart';
 import '../../../core/supabase/supabase_providers.dart';
 import '../../../core/widgets/async_value_widget.dart';
+import '../../../core/widgets/editable_avatar.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../balances/data/balance_model.dart';
 import '../../balances/presentation/balance_summary_text.dart';
@@ -38,11 +40,7 @@ class GroupSettingsScreen extends ConsumerWidget {
 
           return ListView(
             children: [
-              ListTile(
-                leading: GroupAvatar(seed: group.id, icon: group.groupType.icon),
-                title: Text(group.name),
-                subtitle: Text(group.groupType.label),
-              ),
+              _GroupHeaderTile(group: group),
               const Divider(),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -140,6 +138,49 @@ class GroupSettingsScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+class _GroupHeaderTile extends ConsumerStatefulWidget {
+  final Group group;
+  const _GroupHeaderTile({required this.group});
+
+  @override
+  ConsumerState<_GroupHeaderTile> createState() => _GroupHeaderTileState();
+}
+
+class _GroupHeaderTileState extends ConsumerState<_GroupHeaderTile> {
+  bool _isUploading = false;
+
+  Future<void> _changeLogo() async {
+    setState(() => _isUploading = true);
+    try {
+      final url = await ref.read(avatarUploadServiceProvider).pickAndUploadGroupLogo(widget.group.id);
+      if (url != null) {
+        await ref.read(groupsRepositoryProvider).updateAvatarUrl(groupId: widget.group.id, avatarUrl: url);
+        ref.invalidate(groupByIdProvider(widget.group.id));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update group logo: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: EditableAvatar(
+        size: 56,
+        isUploading: _isUploading,
+        onTap: _changeLogo,
+        avatar: GroupAvatar(seed: widget.group.id, icon: widget.group.groupType.icon, avatarUrl: widget.group.avatarUrl, size: 56),
+      ),
+      title: Text(widget.group.name),
+      subtitle: Text(widget.group.groupType.label),
     );
   }
 }

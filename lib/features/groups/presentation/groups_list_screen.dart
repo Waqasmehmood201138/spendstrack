@@ -95,7 +95,7 @@ class _GroupListTile extends ConsumerWidget {
     final myBalances = (balancesAsync.valueOrNull ?? const []).where((b) => b.userId == myUserId).toList();
 
     return ListTile(
-      leading: GroupAvatar(seed: group.id, icon: group.groupType.icon),
+      leading: GroupAvatar(seed: group.id, icon: group.groupType.icon, avatarUrl: group.avatarUrl),
       title: Text(group.name),
       subtitle: BalanceSummaryText(balances: myBalances, owesYouPrefix: 'you are owed', youOwePrefix: 'you owe'),
       onTap: () => context.push('/groups/${group.id}'),

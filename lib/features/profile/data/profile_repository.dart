@@ -31,4 +31,8 @@ class ProfileRepository {
       'default_currency': defaultCurrency,
     }).eq('id', userId);
   }
+
+  Future<void> updatePictureUrl({required String userId, required String pictureUrl}) async {
+    await _client.from('profiles').update({'picture_url': pictureUrl}).eq('id', userId);
+  }
 }

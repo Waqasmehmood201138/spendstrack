@@ -241,6 +241,7 @@ begin
   return new;
 end;
 $$;
+-- Same "any member" precedent as update_group_whiteboard — matches the
 create trigger trg_notify_comment_added
   after insert on public.comments
   for each row execute function public.notify_comment_added();
@@ -288,6 +289,17 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_group_member(p_group_id, auth.uid()) then raise exception 'not authorized'; end if;
   update public.groups set whiteboard = p_whiteboard where id = p_group_id;
+end;
+$$;
+
+-- Same "any member" precedent — matches the avatars_group_write/update
+-- storage policies, which also allow any member to replace the group logo
+-- file, not just the owner.
+create or replace function public.update_group_avatar(p_group_id uuid, p_avatar_url text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_group_member(p_group_id, auth.uid()) then raise exception 'not authorized'; end if;
+  update public.groups set avatar_url = p_avatar_url where id = p_group_id;
 end;
 $$;
 
@@ -444,6 +456,7 @@ end;
 $$;
 
 revoke execute on function public.update_group_whiteboard(uuid, text) from anon, public;
+revoke execute on function public.update_group_avatar(uuid, text) from anon, public;
 revoke execute on function public.create_group(text, public.group_type) from anon, public;
 revoke execute on function public.join_group_by_invite(uuid) from anon, public;
 revoke execute on function public.add_friend_by_email(text) from anon, public;
@@ -454,6 +467,7 @@ revoke execute on function public.notify_expense_participants(uuid) from anon, p
 revoke execute on function public.add_system_comment(uuid, text) from anon, public;
 revoke execute on function public.soft_delete_expense(uuid) from anon, public;
 grant execute on function public.update_group_whiteboard(uuid, text) to authenticated;
+grant execute on function public.update_group_avatar(uuid, text) to authenticated;
 grant execute on function public.create_group(text, public.group_type) to authenticated;
 grant execute on function public.join_group_by_invite(uuid) to authenticated;
 grant execute on function public.add_friend_by_email(text) to authenticated;
@@ -649,3 +663,49 @@ alter publication supabase_realtime add table
   public.comments,
   public.friendships,
   public.notifications;
+
+-- ============================================================================
+-- storage: avatars (profile pictures, group logos)
+-- ============================================================================
+-- Public bucket: avatar URLs are stored as plain strings in profiles.picture_url
+-- / groups.avatar_url and rendered directly, so they need to be publicly
+-- readable (same trust model as any other public avatar host — nothing
+-- sensitive lives in this bucket). Path convention:
+--   avatars/profile/{user_id}.jpg — own profile picture, owner-only write
+--   avatars/group/{group_id}.jpg  — group logo, any member can write
+-- (group logo follows the same "any member" precedent as groups.whiteboard,
+-- not owner-only).
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+create policy "avatars_public_read" on storage.objects for select
+  using (bucket_id = 'avatars');
+
+create policy "avatars_own_profile_write" on storage.objects for insert
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'profile'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+create policy "avatars_own_profile_update" on storage.objects for update
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'profile'
+    and (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+create policy "avatars_group_write" on storage.objects for insert
+  with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'group'
+    and public.is_group_member((storage.foldername(name))[2]::uuid, auth.uid())
+  );
+
+create policy "avatars_group_update" on storage.objects for update
+  using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'group'
+    and public.is_group_member((storage.foldername(name))[2]::uuid, auth.uid())
+  );

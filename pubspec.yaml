@@ -43,6 +43,11 @@ dependencies:
   go_router: ^15.1.2
   flutter_dotenv: ^5.2.1
   intl: ^0.19.0
+  # Pinned to a version published before Flutter 3.24.5 (see NOTE above) —
+  # newer releases' Android build.gradle needs Flutter Gradle tooling this
+  # SDK doesn't have, the same class of issue app_links hit (see
+  # dependency_overrides below).
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

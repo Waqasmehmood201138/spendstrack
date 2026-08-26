@@ -72,9 +72,21 @@ class _HeroHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gradient = groupHeroGradient(group.id);
+    final logoUrl = group.avatarUrl;
     return Container(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 8, left: 16, right: 16, bottom: 24),
-      decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: gradient)),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: gradient),
+        image: (logoUrl != null && logoUrl.isNotEmpty)
+            ? DecorationImage(
+                image: NetworkImage(logoUrl),
+                fit: BoxFit.cover,
+                // Uploaded logo shows through a dark scrim so the white
+                // title/member-count text stays legible over any photo.
+                colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.45), BlendMode.darken),
+              )
+            : null,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

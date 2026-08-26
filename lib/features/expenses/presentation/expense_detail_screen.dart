@@ -234,7 +234,7 @@ class _CommentTile extends ConsumerWidget {
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: DefaultTextStyle.of(context).style,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface),
                 children: [
                   TextSpan(text: '$name  ', style: const TextStyle(fontWeight: FontWeight.bold)),
                   TextSpan(text: comment.content),

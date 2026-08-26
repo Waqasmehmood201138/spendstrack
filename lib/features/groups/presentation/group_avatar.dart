@@ -16,25 +16,44 @@ const _groupGradients = [
 /// detail screen's hero header can reuse it as a full-bleed background.
 List<Color> groupHeroGradient(String seed) => _groupGradients[seed.hashCode.abs() % _groupGradients.length];
 
-/// Splitwise auto-generates a unique colorful geometric icon per group.
-/// This approximates that with a deterministic gradient (picked from the
-/// group id's hash, so it's stable across rebuilds) plus the group type's
-/// icon on top — no image asset pipeline required.
+/// Renders the group's uploaded logo when there is one; otherwise falls
+/// back to Splitwise's own auto-generated-icon approximation — a
+/// deterministic gradient (picked from the group id's hash, so it's stable
+/// across rebuilds) plus the group type's icon on top.
 class GroupAvatar extends StatelessWidget {
   final String seed;
   final IconData icon;
   final double size;
+  final String? avatarUrl;
 
-  const GroupAvatar({super.key, required this.seed, required this.icon, this.size = 48});
+  const GroupAvatar({super.key, required this.seed, required this.icon, this.size = 48, this.avatarUrl});
 
   @override
   Widget build(BuildContext context) {
+    final url = avatarUrl;
+    final borderRadius = BorderRadius.circular(size * 0.22);
+    if (url != null && url.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: borderRadius,
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _fallback(borderRadius),
+        ),
+      );
+    }
+    return _fallback(borderRadius);
+  }
+
+  Widget _fallback(BorderRadius borderRadius) {
     final pair = groupHeroGradient(seed);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.22),
+        borderRadius: borderRadius,
         gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: pair),
       ),
       child: Icon(icon, color: Colors.white, size: size * 0.5),
