@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for every Supabase call (REST, Realtime websockets, Auth).
+         `flutter run` debug builds work without this because Flutter's
+         debug-only manifest merges it in automatically for the VM
+         service/hot-reload connection — a release build has no such
+         fallback, so without this line every network call fails with a
+         confusing "Failed host lookup" / DNS error instead of a clear
+         permission error. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="spendstrack"
         android:name="${applicationName}"
@@ -23,6 +31,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Group invite links: spendstrack://join/{invite_token} — see
+                 lib/core/router/deep_link_handler.dart for the receiving side. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="spendstrack" android:host="join"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

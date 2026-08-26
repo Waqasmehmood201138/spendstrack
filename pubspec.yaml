@@ -48,6 +48,9 @@ dependencies:
   # SDK doesn't have, the same class of issue app_links hit (see
   # dependency_overrides below).
   image_picker: ^1.1.2
+  # Handles the spendstrack://join/{token} group-invite deep link (see
+  # dependency_overrides above for why this is pinned to 6.3.2, not latest).
+  app_links: ^6.3.2
 
 dev_dependencies:
   flutter_test:
